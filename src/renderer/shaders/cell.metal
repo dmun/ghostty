@@ -149,6 +149,13 @@ fragment float4 cell_bg_fragment(
     }
   }
 
+  int rows = 2;
+  if (grid_pos.y >= uniforms.grid_size.y - rows) {
+    if (in.position.y < grid_pos.y * uniforms.cell_size.y + uniforms.grid_padding.z) {
+      grid_pos.y = grid_pos.y - 1;
+    }
+  }
+
   // Retrieve color for cell and return it.
   return float4(cells[grid_pos.y * uniforms.grid_size.x + grid_pos.x]) / 255.0;
 }
@@ -205,6 +212,11 @@ vertex CellTextVertexOut cell_text_vertex(
 ) {
   // Convert the grid x, y into world space x, y by accounting for cell size
   float2 cell_pos = uniforms.cell_size * float2(in.grid_pos);
+
+  int rows = 2;
+  if (in.grid_pos.y >= uniforms.grid_size.y - rows) {
+    cell_pos.y += uniforms.grid_padding.z;
+  }
 
   // Turn the cell position into a vertex point depending on the
   // vertex ID. Since we use instanced drawing, we have 4 vertices
