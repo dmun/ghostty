@@ -2289,7 +2289,7 @@ fn rebuildCells(
             } else if (y == self.cells.size.rows - 1) {
                 self.uniforms.bottom_row_count = if (row.isOpaque(
                     color_palette,
-                    self.background_color,
+                    self.background_color orelse self.default_background_color,
                 )) 1 else 0;
                 log.debug("count: {}", .{self.uniforms.bottom_row_count});
             } else if (y == self.cells.size.rows - 2) {
