@@ -147,23 +147,28 @@ const c = @cImport({
 /// By default, synthetic styles are enabled.
 @"font-synthetic-style": FontSyntheticStyle = .{},
 
-/// Apply a font feature. This can be repeated multiple times to enable multiple
-/// font features. You can NOT set multiple font features with a single value
-/// (yet).
+/// Apply a font feature. To enable multiple font features you can repeat
+/// this multiple times or use a comma-separated list of feature settings.
+///
+/// The syntax for feature settings is as follows, where `feat` is a feature:
+///
+///   * Enable features with e.g. `feat`, `+feat`, `feat on`, `feat=1`.
+///   * Disabled features with e.g. `-feat`, `feat off`, `feat=0`.
+///   * Set a feature value with e.g. `feat=2`, `feat = 3`, `feat 4`.
+///   * Feature names may be wrapped in quotes, meaning this config should be
+///     syntactically compatible with the `font-feature-settings` CSS property.
+///
+/// The syntax is fairly loose, but invalid settings will be silently ignored.
 ///
 /// The font feature will apply to all fonts rendered by Ghostty. A future
 /// enhancement will allow targeting specific faces.
-///
-/// A valid value is the name of a feature. Prefix the feature with a `-` to
-/// explicitly disable it. Example: `ss20` or `-ss20`.
 ///
 /// To disable programming ligatures, use `-calt` since this is the typical
 /// feature name for programming ligatures. To look into what font features
 /// your font has and what they do, use a font inspection tool such as
 /// [fontdrop.info](https://fontdrop.info).
 ///
-/// To generally disable most ligatures, use `-calt`, `-liga`, and `-dlig` (as
-/// separate repetitive entries in your config).
+/// To generally disable most ligatures, use `-calt, -liga, -dlig`.
 @"font-feature": RepeatableString = .{},
 
 /// Font size in points. This value can be a non-integer and the nearest integer
@@ -177,6 +182,10 @@ const c = @cImport({
 /// depending on your `window-inherit-font-size` setting. If that setting is
 /// true, only the first window will be affected by this change since all
 /// subsequent windows will inherit the font size of the previous window.
+///
+/// On Linux with GTK, font size is scaled according to both display-wide and
+/// text-specific scaling factors, which are often managed by your desktop
+/// environment (e.g. the GNOME display scale and large text settings).
 @"font-size": f32 = switch (builtin.os.tag) {
     // On macOS we default a little bigger since this tends to look better. This
     // is purely subjective but this is easy to modify.
@@ -255,30 +264,40 @@ const c = @cImport({
 ///     that things like status lines continue to look aligned.
 @"adjust-cell-width": ?MetricModifier = null,
 @"adjust-cell-height": ?MetricModifier = null,
-/// Distance in pixels from the bottom of the cell to the text baseline.
+/// Distance in pixels or percentage adjustment from the bottom of the cell to the text baseline.
 /// Increase to move baseline UP, decrease to move baseline DOWN.
+/// See the notes about adjustments in `adjust-cell-width`.
 @"adjust-font-baseline": ?MetricModifier = null,
-/// Distance in pixels from the top of the cell to the top of the underline.
+/// Distance in pixels or percentage adjustment from the top of the cell to the top of the underline.
 /// Increase to move underline DOWN, decrease to move underline UP.
+/// See the notes about adjustments in `adjust-cell-width`.
 @"adjust-underline-position": ?MetricModifier = null,
 /// Thickness in pixels of the underline.
+/// See the notes about adjustments in `adjust-cell-width`.
 @"adjust-underline-thickness": ?MetricModifier = null,
-/// Distance in pixels from the top of the cell to the top of the strikethrough.
+/// Distance in pixels or percentage adjustment from the top of the cell to the top of the strikethrough.
 /// Increase to move strikethrough DOWN, decrease to move underline UP.
+/// See the notes about adjustments in `adjust-cell-width`.
 @"adjust-strikethrough-position": ?MetricModifier = null,
-/// Thickness in pixels of the strikethrough.
+/// Thickness in pixels or percentage adjustment of the strikethrough.
+/// See the notes about adjustments in `adjust-cell-width`.
 @"adjust-strikethrough-thickness": ?MetricModifier = null,
-/// Distance in pixels from the top of the cell to the top of the overline.
+/// Distance in pixels or percentage adjustment from the top of the cell to the top of the overline.
 /// Increase to move overline DOWN, decrease to move underline UP.
+/// See the notes about adjustments in `adjust-cell-width`.
 @"adjust-overline-position": ?MetricModifier = null,
-/// Thickness in pixels of the overline.
+/// Thickness in pixels or percentage adjustment of the overline.
+/// See the notes about adjustments in `adjust-cell-width`.
 @"adjust-overline-thickness": ?MetricModifier = null,
-/// Thickness in pixels of the bar cursor and outlined rect cursor.
+/// Thickness in pixels or percentage adjustment of the bar cursor and outlined rect cursor.
+/// See the notes about adjustments in `adjust-cell-width`.
 @"adjust-cursor-thickness": ?MetricModifier = null,
-/// Height in pixels of the cursor. Currently applies to all cursor types:
+/// Height in pixels or percentage adjustment of the cursor. Currently applies to all cursor types:
 /// bar, rect, and outlined rect.
+/// See the notes about adjustments in `adjust-cell-width`.
 @"adjust-cursor-height": ?MetricModifier = null,
-/// Thickness in pixels of box drawing characters.
+/// Thickness in pixels or percentage adjustment of box drawing characters.
+/// See the notes about adjustments in `adjust-cell-width`.
 @"adjust-box-thickness": ?MetricModifier = null,
 
 /// The method to use for calculating the cell width of a grapheme cluster.
@@ -310,7 +329,7 @@ const c = @cImport({
 
 /// FreeType load flags to enable. The format of this is a list of flags to
 /// enable separated by commas. If you prefix a flag with `no-` then it is
-/// disabled. If you omit a flag, it's default value is used, so you must
+/// disabled. If you omit a flag, its default value is used, so you must
 /// explicitly disable flags you don't want. You can also use `true` or `false`
 /// to turn all flags on or off.
 ///
@@ -475,7 +494,7 @@ palette: Palette = .{},
 ///
 /// Valid values are:
 ///
-///   * `` (blank)
+///   * ` ` (blank)
 ///   * `true`
 ///   * `false`
 ///
@@ -550,6 +569,8 @@ palette: Palette = .{},
 /// On macOS, background opacity is disabled when the terminal enters native
 /// fullscreen. This is because the background becomes gray and it can cause
 /// widgets to show through which isn't generally desirable.
+///
+/// On macOS, changing this configuration requires restarting Ghostty completely.
 @"background-opacity": f64 = 1.0,
 
 /// A positive value enables blurring of the background when background-opacity
@@ -669,7 +690,7 @@ command: ?[]const u8 = null,
 /// This is a future planned feature.
 ///
 /// This can be changed at runtime but will only affect new terminal surfaces.
-@"scrollback-limit": u32 = 10_000_000, // 10MB
+@"scrollback-limit": usize = 10_000_000, // 10MB
 
 /// Match a regular expression against the terminal text and associate clicking
 /// it with an action. This can be used to match URLs, file paths, etc. Actions
@@ -769,7 +790,25 @@ class: ?[:0]const u8 = null,
 /// the documentation or using the `ghostty +list-actions` command.
 ///
 /// Trigger: `+`-separated list of keys and modifiers. Example: `ctrl+a`,
-/// `ctrl+shift+b`, `up`. Some notes:
+/// `ctrl+shift+b`, `up`.
+///
+/// Valid keys are currently only listed in the
+/// [Ghostty source code](https://github.com/ghostty-org/ghostty/blob/d6e76858164d52cff460fedc61ddf2e560912d71/src/input/key.zig#L255).
+/// This is a documentation limitation and we will improve this in the future.
+/// A common gotcha is that numeric keys are written as words: i.e. `one`,
+/// `two`, `three`, etc. and not `1`, `2`, `3`. This will also be improved in
+/// the future.
+///
+/// Valid modifiers are `shift`, `ctrl` (alias: `control`), `alt` (alias: `opt`,
+/// `option`), and `super` (alias: `cmd`, `command`). You may use the modifier
+/// or the alias. When debugging keybinds, the non-aliased modifier will always
+/// be used in output.
+///
+/// Note: The fn or "globe" key on keyboards are not supported as a
+/// modifier. This is a limitation of the operating systems and GUI toolkits
+/// that Ghostty uses.
+///
+/// Some additional notes for triggers:
 ///
 ///   * modifiers cannot repeat, `ctrl+ctrl+a` is invalid.
 ///
@@ -782,15 +821,6 @@ class: ?[:0]const u8 = null,
 ///     physical key mapping rather than a logical one. A physical key
 ///     mapping responds to the hardware keycode and not the keycode
 ///     translated by any system keyboard layouts. Example: "ctrl+physical:a"
-///
-/// Valid modifiers are `shift`, `ctrl` (alias: `control`), `alt` (alias: `opt`,
-/// `option`), and `super` (alias: `cmd`, `command`). You may use the modifier
-/// or the alias. When debugging keybinds, the non-aliased modifier will always
-/// be used in output.
-///
-/// Note: The fn or "globe" key on keyboards are not supported as a
-/// modifier. This is a limitation of the operating systems and GUI toolkits
-/// that Ghostty uses.
 ///
 /// You may also specify multiple triggers separated by `>` to require a
 /// sequence of triggers to activate the action. For example,
@@ -1079,11 +1109,37 @@ keybind: Keybinds = .{},
 /// BUG: On Linux with GTK, the calculated window size will not properly take
 /// into account window decorations. As a result, the grid dimensions will not
 /// exactly match this configuration. If window decorations are disabled (see
-/// window-decorations), then this will work as expected.
+/// `window-decoration`), then this will work as expected.
 ///
 /// Windows smaller than 10 wide by 4 high are not allowed.
 @"window-height": u32 = 0,
 @"window-width": u32 = 0,
+
+/// The starting window position. This position is in pixels and is relative
+/// to the top-left corner of the primary monitor. Both values must be set to take
+/// effect. If only one value is set, it is ignored.
+///
+/// Note that the window manager may put limits on the position or override
+/// the position. For example, a tiling window manager may force the window
+/// to be a certain position to fit within the grid. There is nothing Ghostty
+/// will do about this, but it will make an effort.
+///
+/// Also note that negative values are also up to the operating system and
+/// window manager. Some window managers may not allow windows to be placed
+/// off-screen.
+///
+/// Invalid positions are runtime-specific, but generally the positions are
+/// clamped to the nearest valid position.
+///
+/// On macOS, the window position is relative to the top-left corner of
+/// the visible screen area. This means that if the menu bar is visible, the
+/// window will be placed below the menu bar.
+///
+/// Note: this is only supported on macOS and Linux GLFW builds. The GTK
+/// runtime does not support setting the window position (this is a limitation
+/// of GTK 4.0).
+@"window-position-x": ?i16 = null,
+@"window-position-y": ?i16 = null,
 
 /// Whether to enable saving and restoring window state. Window state includes
 /// their position, size, tabs, splits, etc. Some window state requires shell
@@ -1129,6 +1185,16 @@ keybind: Keybinds = .{},
 ///
 ///   * `end` - Insert the new tab at the end of the tab list.
 @"window-new-tab-position": WindowNewTabPosition = .current,
+
+/// Background color for the window titlebar. This only takes effect if
+/// window-theme is set to ghostty. Currently only supported in the GTK app
+/// runtime.
+@"window-titlebar-background": ?Color = null,
+
+/// Foreground color for the window titlebar. This only takes effect if
+/// window-theme is set to ghostty. Currently only supported in the GTK app
+/// runtime.
+@"window-titlebar-foreground": ?Color = null,
 
 /// This controls when resize overlays are shown. Resize overlays are a
 /// transient popup that shows the size of the terminal while the surfaces are
@@ -1191,7 +1257,7 @@ keybind: Keybinds = .{},
 
 /// If true, when there are multiple split panes, the mouse selects the pane
 /// that is focused. This only applies to the currently focused window; i.e.
-/// mousing over a split in an unfocused window will now focus that split
+/// mousing over a split in an unfocused window will not focus that split
 /// and bring the window to front.
 ///
 /// Default is false.
@@ -1224,6 +1290,15 @@ keybind: Keybinds = .{},
 /// program has bracketed paste mode enabled (a setting set by the running
 /// program, not the terminal emulator).
 @"clipboard-paste-bracketed-safe": bool = true,
+
+/// Enables or disabled title reporting (CSI 21 t). This escape sequence
+/// allows the running program to query the terminal title. This is a common
+/// security issue and is disabled by default.
+///
+/// Warning: This can expose sensitive information at best and enable
+/// arbitrary code execution at worst (with a maliciously crafted title
+/// and a minor amount of user interaction).
+@"title-report": bool = false,
 
 /// The total amount of bytes that can be used for image data (i.e. the Kitty
 /// image protocol) per terminal screen. The maximum value is 4,294,967,295
@@ -1304,9 +1379,13 @@ keybind: Keybinds = .{},
 /// This configuration can only be set via CLI arguments.
 @"config-default-files": bool = true,
 
-/// Confirms that a surface should be closed before closing it. This defaults to
-/// true. If set to false, surfaces will close without any confirmation.
-@"confirm-close-surface": bool = true,
+/// Confirms that a surface should be closed before closing it.
+///
+/// This defaults to `true`. If set to `false`, surfaces will close without
+/// any confirmation. This can also be set to `always`, which will always
+/// confirm closing a surface, even if shell integration says a process isn't
+/// running.
+@"confirm-close-surface": ConfirmCloseSurface = .true,
 
 /// Whether or not to quit after the last surface is closed.
 ///
@@ -1380,6 +1459,9 @@ keybind: Keybinds = .{},
 ///   * `center` - Terminal appears at the center of the screen.
 ///
 /// Changing this configuration requires restarting Ghostty completely.
+///
+/// Note: There is no default keybind for toggling the quick terminal.
+/// To enable this feature, bind the `toggle_quick_terminal` action to a key.
 @"quick-terminal-position": QuickTerminalPosition = .top,
 
 /// The screen where the quick terminal should show up.
@@ -1812,7 +1894,7 @@ keybind: Keybinds = .{},
 ///
 /// If `false`, each new ghostty process will launch a separate application.
 ///
-/// The default value is `detect` which will default to `true` if Ghostty
+/// The default value is `desktop` which will default to `true` if Ghostty
 /// detects that it was launched from the `.desktop` file such as an app
 /// launcher (like Gnome Shell)  or by D-Bus activation. If Ghostty is launched
 /// from the command line, it will default to `false`.
@@ -1918,10 +2000,11 @@ term: []const u8 = "xterm-ghostty",
 ///  * `download` - Check for updates, automatically download the update,
 ///    notify the user, but do not automatically install the update.
 ///
-/// The default value is `check`.
+/// If unset, we defer to Sparkle's default behavior, which respects the
+/// preference stored in the standard user defaults (`defaults(1)`).
 ///
 /// Changing this value at runtime works after a small delay.
-@"auto-update": AutoUpdate = .check,
+@"auto-update": ?AutoUpdate = null,
 
 /// The release channel to use for auto-updates.
 ///
@@ -2038,6 +2121,20 @@ pub fn default(alloc_gpa: Allocator) Allocator.Error!Config {
             .{ .key = .{ .translated = .v }, .mods = mods },
             .{ .paste_from_clipboard = {} },
         );
+        // On non-MacOS desktop envs (Windows, KDE, Gnome, Xfce), ctrl+insert is an
+        // alt keybinding for Copy and shift+ins is an alt keybinding for Paste
+        if (!builtin.target.isDarwin()) {
+            try result.keybind.set.put(
+                alloc,
+                .{ .key = .{ .translated = .insert }, .mods = .{ .ctrl = true } },
+                .{ .copy_to_clipboard = {} },
+            );
+            try result.keybind.set.put(
+                alloc,
+                .{ .key = .{ .translated = .insert }, .mods = .{ .shift = true } },
+                .{ .paste_from_clipboard = {} },
+            );
+        }
     }
 
     // Increase font size mapping for keyboards with dedicated plus keys (like german)
@@ -2202,12 +2299,12 @@ pub fn default(alloc_gpa: Allocator) Allocator.Error!Config {
         try result.keybind.set.put(
             alloc,
             .{ .key = .{ .translated = .up }, .mods = .{ .ctrl = true, .alt = true } },
-            .{ .goto_split = .top },
+            .{ .goto_split = .up },
         );
         try result.keybind.set.put(
             alloc,
             .{ .key = .{ .translated = .down }, .mods = .{ .ctrl = true, .alt = true } },
-            .{ .goto_split = .bottom },
+            .{ .goto_split = .down },
         );
         try result.keybind.set.put(
             alloc,
@@ -2471,12 +2568,12 @@ pub fn default(alloc_gpa: Allocator) Allocator.Error!Config {
         try result.keybind.set.put(
             alloc,
             .{ .key = .{ .translated = .up }, .mods = .{ .super = true, .alt = true } },
-            .{ .goto_split = .top },
+            .{ .goto_split = .up },
         );
         try result.keybind.set.put(
             alloc,
             .{ .key = .{ .translated = .down }, .mods = .{ .super = true, .alt = true } },
-            .{ .goto_split = .bottom },
+            .{ .goto_split = .down },
         );
         try result.keybind.set.put(
             alloc,
@@ -2557,6 +2654,11 @@ pub fn default(alloc_gpa: Allocator) Allocator.Error!Config {
         );
         try result.keybind.set.put(
             alloc,
+            .{ .key = .{ .translated = .backspace }, .mods = .{ .super = true } },
+            .{ .esc = "\x15" },
+        );
+        try result.keybind.set.put(
+            alloc,
             .{ .key = .{ .translated = .left }, .mods = .{ .alt = true } },
             .{ .esc = "b" },
         );
@@ -2618,18 +2720,43 @@ pub fn loadFile(self: *Config, alloc: Allocator, path: []const u8) !void {
     try self.expandPaths(std.fs.path.dirname(path).?);
 }
 
+pub const OptionalFileAction = enum { loaded, not_found, @"error" };
+
 /// Load optional configuration file from `path`. All errors are ignored.
-pub fn loadOptionalFile(self: *Config, alloc: Allocator, path: []const u8) void {
-    self.loadFile(alloc, path) catch |err| switch (err) {
-        error.FileNotFound => std.log.info(
-            "optional config file not found, not loading path={s}",
-            .{path},
-        ),
-        else => std.log.warn(
-            "error reading optional config file, not loading err={} path={s}",
-            .{ err, path },
-        ),
-    };
+///
+/// Returns the action that was taken.
+pub fn loadOptionalFile(
+    self: *Config,
+    alloc: Allocator,
+    path: []const u8,
+) OptionalFileAction {
+    if (self.loadFile(alloc, path)) {
+        return .loaded;
+    } else |err| switch (err) {
+        error.FileNotFound => return .not_found,
+        else => {
+            std.log.warn(
+                "error reading optional config file, not loading err={} path={s}",
+                .{ err, path },
+            );
+
+            return .@"error";
+        },
+    }
+}
+
+fn writeConfigTemplate(path: []const u8) !void {
+    log.info("creating template config file: path={s}", .{path});
+    if (std.fs.path.dirname(path)) |dir_path| {
+        try std.fs.makeDirAbsolute(dir_path);
+    }
+    const file = try std.fs.createFileAbsolute(path, .{});
+    defer file.close();
+    try std.fmt.format(
+        file.writer(),
+        @embedFile("./config-template"),
+        .{ .path = path },
+    );
 }
 
 /// Load configurations from the default configuration files. The default
@@ -2638,14 +2765,30 @@ pub fn loadOptionalFile(self: *Config, alloc: Allocator, path: []const u8) void 
 /// On macOS, `$HOME/Library/Application Support/$CFBundleIdentifier/config`
 /// is also loaded.
 pub fn loadDefaultFiles(self: *Config, alloc: Allocator) !void {
+    // Load XDG first
     const xdg_path = try internal_os.xdg.config(alloc, .{ .subdir = "ghostty/config" });
     defer alloc.free(xdg_path);
-    self.loadOptionalFile(alloc, xdg_path);
+    const xdg_action = self.loadOptionalFile(alloc, xdg_path);
 
+    // On macOS load the app support directory as well
     if (comptime builtin.os.tag == .macos) {
         const app_support_path = try internal_os.macos.appSupportDir(alloc, "config");
         defer alloc.free(app_support_path);
-        self.loadOptionalFile(alloc, app_support_path);
+        const app_support_action = self.loadOptionalFile(alloc, app_support_path);
+
+        // If both files are not found, then we create a template file.
+        // For macOS, we only create the template file in the app support
+        if (app_support_action == .not_found and xdg_action == .not_found) {
+            writeConfigTemplate(app_support_path) catch |err| {
+                log.warn("error creating template config file err={}", .{err});
+            };
+        }
+    } else {
+        if (xdg_action == .not_found) {
+            writeConfigTemplate(xdg_path) catch |err| {
+                log.warn("error creating template config file err={}", .{err});
+            };
+        }
     }
 }
 
@@ -2755,17 +2898,21 @@ pub fn loadCliArgs(self: *Config, alloc_gpa: Allocator) !void {
         // replace the entire list with the new list.
         inline for (fields, 0..) |field, i| {
             const v = &@field(self, field);
-            const len = v.list.items.len - counter[i];
-            if (len > 0) {
-                // Note: we don't have to worry about freeing the memory
-                // that we overwrite or cut off here because its all in
-                // an arena.
-                v.list.replaceRangeAssumeCapacity(
-                    0,
-                    len,
-                    v.list.items[counter[i]..],
-                );
-                v.list.items.len = len;
+
+            // The list can be empty if it was reset, i.e. --font-family=""
+            if (v.list.items.len > 0) {
+                const len = v.list.items.len - counter[i];
+                if (len > 0) {
+                    // Note: we don't have to worry about freeing the memory
+                    // that we overwrite or cut off here because its all in
+                    // an arena.
+                    v.list.replaceRangeAssumeCapacity(
+                        0,
+                        len,
+                        v.list.items[counter[i]..],
+                    );
+                    v.list.items.len = len;
+                }
             }
         }
     }
@@ -3636,6 +3783,15 @@ const Replay = struct {
     }
 };
 
+/// Valid values for confirm-close-surface
+/// c_int because it needs to be extern compatible
+/// If this is changed, you must also update ghostty.h
+pub const ConfirmCloseSurface = enum(c_int) {
+    false,
+    true,
+    always,
+};
+
 /// Valid values for custom-shader-animation
 /// c_int because it needs to be extern compatible
 /// If this is changed, you must also update ghostty.h
@@ -3738,17 +3894,22 @@ pub const Color = struct {
     pub fn fromHex(input: []const u8) !Color {
         // Trim the beginning '#' if it exists
         const trimmed = if (input.len != 0 and input[0] == '#') input[1..] else input;
+        if (trimmed.len != 6 and trimmed.len != 3) return error.InvalidValue;
 
-        // We expect exactly 6 for RRGGBB
-        if (trimmed.len != 6) return error.InvalidValue;
+        // Expand short hex values to full hex values
+        const rgb: []const u8 = if (trimmed.len == 3) &.{
+            trimmed[0], trimmed[0],
+            trimmed[1], trimmed[1],
+            trimmed[2], trimmed[2],
+        } else trimmed;
 
         // Parse the colors two at a time.
         var result: Color = undefined;
         comptime var i: usize = 0;
         inline while (i < 6) : (i += 2) {
             const v: u8 =
-                ((try std.fmt.charToDigit(trimmed[i], 16)) * 16) +
-                try std.fmt.charToDigit(trimmed[i + 1], 16);
+                ((try std.fmt.charToDigit(rgb[i], 16)) * 16) +
+                try std.fmt.charToDigit(rgb[i + 1], 16);
 
             @field(result, switch (i) {
                 0 => "r",
@@ -3768,6 +3929,8 @@ pub const Color = struct {
         try testing.expectEqual(Color{ .r = 10, .g = 11, .b = 12 }, try Color.fromHex("#0A0B0C"));
         try testing.expectEqual(Color{ .r = 10, .g = 11, .b = 12 }, try Color.fromHex("0A0B0C"));
         try testing.expectEqual(Color{ .r = 255, .g = 255, .b = 255 }, try Color.fromHex("FFFFFF"));
+        try testing.expectEqual(Color{ .r = 255, .g = 255, .b = 255 }, try Color.fromHex("FFF"));
+        try testing.expectEqual(Color{ .r = 51, .g = 68, .b = 85 }, try Color.fromHex("#345"));
     }
 
     test "parseCLI from name" {
@@ -4232,6 +4395,45 @@ pub const RepeatablePath = struct {
             // If it isn't absolute, we need to make it absolute relative
             // to the base.
             var buf: [std.fs.max_path_bytes]u8 = undefined;
+
+            // Check if the path starts with a tilde and expand it to the
+            // home directory on Linux/macOS. We explicitly look for "~/"
+            // because we don't support alternate users such as "~alice/"
+            if (std.mem.startsWith(u8, path, "~/")) expand: {
+                // Windows isn't supported yet
+                if (comptime builtin.os.tag == .windows) break :expand;
+
+                const expanded: []const u8 = internal_os.expandHome(
+                    path,
+                    &buf,
+                ) catch |err| {
+                    try diags.append(alloc, .{
+                        .message = try std.fmt.allocPrintZ(
+                            alloc,
+                            "error expanding home directory for path {s}: {}",
+                            .{ path, err },
+                        ),
+                    });
+
+                    // Blank this path so that we don't attempt to resolve it
+                    // again
+                    self.value.items[i] = .{ .required = "" };
+
+                    continue;
+                };
+
+                log.debug(
+                    "expanding file path from home directory: path={s}",
+                    .{expanded},
+                );
+
+                switch (self.value.items[i]) {
+                    .optional, .required => |*p| p.* = try alloc.dupeZ(u8, expanded),
+                }
+
+                continue;
+            }
+
             const abs = dir.realpath(path, &buf) catch |err| abs: {
                 if (err == error.FileNotFound) {
                     // The file doesn't exist. Try to resolve the relative path
@@ -4642,9 +4844,11 @@ pub const Keybinds = struct {
         try list.parseCLI(alloc, "ctrl+z>2=goto_tab:2");
         try list.formatEntry(formatterpkg.entryFormatter("keybind", buf.writer()));
 
+        // Note they turn into translated keys because they match
+        // their ASCII mapping.
         const want =
-            \\keybind = ctrl+z>1=goto_tab:1
-            \\keybind = ctrl+z>2=goto_tab:2
+            \\keybind = ctrl+z>two=goto_tab:2
+            \\keybind = ctrl+z>one=goto_tab:1
             \\
         ;
         try std.testing.expectEqualStrings(want, buf.items);

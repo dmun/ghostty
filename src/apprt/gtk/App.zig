@@ -15,6 +15,7 @@ const assert = std.debug.assert;
 const Allocator = std.mem.Allocator;
 const builtin = @import("builtin");
 const build_config = @import("../../build_config.zig");
+const build_options = @import("build_options");
 const apprt = @import("../../apprt.zig");
 const configpkg = @import("../../config.zig");
 const input = @import("../../input.zig");
@@ -360,6 +361,7 @@ pub fn init(core_app: *CoreApp, opts: Options) !App {
     // keyboard state but the block does more than that (i.e. setting up
     // WM_CLASS).
     const x11_xkb: ?x11.Xkb = x11_xkb: {
+        if (comptime !build_options.x11) break :x11_xkb null;
         if (!x11.is_display(display)) break :x11_xkb null;
 
         // Set the X11 window class property (WM_CLASS) if are are on an X11
@@ -784,6 +786,7 @@ fn setInitialSize(
         ),
     }
 }
+
 fn showDesktopNotification(
     self: *App,
     target: apprt.Target,
@@ -966,8 +969,8 @@ fn loadRuntimeCss(
     const config: *const Config = &self.config;
     const window_theme = config.@"window-theme";
     const unfocused_fill: Config.Color = config.@"unfocused-split-fill" orelse config.background;
-    const headerbar_background = config.background;
-    const headerbar_foreground = config.foreground;
+    const headerbar_background = config.@"window-titlebar-background" orelse config.background;
+    const headerbar_foreground = config.@"window-titlebar-foreground" orelse config.foreground;
 
     try writer.print(
         \\widget.unfocused-split {{
@@ -985,11 +988,15 @@ fn loadRuntimeCss(
         switch (window_theme) {
             .ghostty => try writer.print(
                 \\:root {{
-                \\  --headerbar-fg-color: rgb({d},{d},{d});
-                \\  --headerbar-bg-color: rgb({d},{d},{d});
+                \\  --ghostty-fg: rgb({d},{d},{d});
+                \\  --ghostty-bg: rgb({d},{d},{d});
+                \\  --headerbar-fg-color: var(--ghostty-fg);
+                \\  --headerbar-bg-color: var(--ghostty-bg);
                 \\  --headerbar-backdrop-color: oklab(from var(--headerbar-bg-color) calc(l * 0.9) a b / alpha);
-                \\  --popover-fg-color: rgb({d},{d},{d});
-                \\  --popover-bg-color: rgb({d},{d},{d});
+                \\  --overview-fg-color: var(--ghostty-fg);
+                \\  --overview-bg-color: var(--ghostty-bg);
+                \\  --popover-fg-color: var(--ghostty-fg);
+                \\  --popover-bg-color: var(--ghostty-bg);
                 \\}}
                 \\windowhandle {{
                 \\  background-color: var(--headerbar-bg-color);
@@ -999,12 +1006,6 @@ fn loadRuntimeCss(
                 \\ background-color: var(--headerbar-backdrop-color);
                 \\}}
             , .{
-                headerbar_foreground.r,
-                headerbar_foreground.g,
-                headerbar_foreground.b,
-                headerbar_background.r,
-                headerbar_background.g,
-                headerbar_background.b,
                 headerbar_foreground.r,
                 headerbar_foreground.g,
                 headerbar_foreground.b,
@@ -1400,7 +1401,15 @@ pub fn getColorScheme(self: *App) apprt.ColorScheme {
         null,
         &err,
     ) orelse {
-        if (err) |e| log.err("unable to get current color scheme: {s}", .{e.message});
+        if (err) |e| {
+            // If ReadOne is not yet implemented, fall back to deprecated "Read" method
+            // Error code: GDBus.Error:org.freedesktop.DBus.Error.UnknownMethod: No such method “ReadOne”
+            if (e.code == 19) {
+                return self.getColorSchemeDeprecated();
+            }
+            // Otherwise, log the error and return .light
+            log.err("unable to get current color scheme: {s}", .{e.message});
+        }
         return .light;
     };
     defer c.g_variant_unref(value);
@@ -1414,6 +1423,49 @@ pub fn getColorScheme(self: *App) apprt.ColorScheme {
         }
     }
 
+    return .light;
+}
+
+/// Call the deprecated D-Bus "Read" method to determine the current color scheme. If
+/// there is any error at any point we'll log the error and return "light"
+fn getColorSchemeDeprecated(self: *App) apprt.ColorScheme {
+    const dbus_connection = c.g_application_get_dbus_connection(@ptrCast(self.app));
+    var err: ?*c.GError = null;
+    defer if (err) |e| c.g_error_free(e);
+
+    const value = c.g_dbus_connection_call_sync(
+        dbus_connection,
+        "org.freedesktop.portal.Desktop",
+        "/org/freedesktop/portal/desktop",
+        "org.freedesktop.portal.Settings",
+        "Read",
+        c.g_variant_new("(ss)", "org.freedesktop.appearance", "color-scheme"),
+        c.G_VARIANT_TYPE("(v)"),
+        c.G_DBUS_CALL_FLAGS_NONE,
+        -1,
+        null,
+        &err,
+    ) orelse {
+        if (err) |e| log.err("Read method failed: {s}", .{e.message});
+        return .light;
+    };
+    defer c.g_variant_unref(value);
+
+    if (c.g_variant_is_of_type(value, c.G_VARIANT_TYPE("(v)")) == 1) {
+        var inner: ?*c.GVariant = null;
+        c.g_variant_get(value, "(v)", &inner);
+        defer if (inner) |i| c.g_variant_unref(i);
+
+        if (inner) |i| {
+            const child = c.g_variant_get_child_value(i, 0) orelse {
+                return .light;
+            };
+            defer c.g_variant_unref(child);
+
+            const val = c.g_variant_get_uint32(child);
+            return if (val == 1) .dark else .light;
+        }
+    }
     return .light;
 }
 

@@ -22,6 +22,8 @@ pub const BuildConfig = struct {
     version: std.SemanticVersion = .{ .major = 0, .minor = 0, .patch = 0 },
     flatpak: bool = false,
     adwaita: bool = false,
+    x11: bool = false,
+    sentry: bool = true,
     app_runtime: apprt.Runtime = .none,
     renderer: rendererpkg.Impl = .opengl,
     font_backend: font.Backend = .freetype,
@@ -41,6 +43,8 @@ pub const BuildConfig = struct {
         // support all types.
         step.addOption(bool, "flatpak", self.flatpak);
         step.addOption(bool, "adwaita", self.adwaita);
+        step.addOption(bool, "x11", self.x11);
+        step.addOption(bool, "sentry", self.sentry);
         step.addOption(apprt.Runtime, "app_runtime", self.app_runtime);
         step.addOption(font.Backend, "font_backend", self.font_backend);
         step.addOption(rendererpkg.Impl, "renderer", self.renderer);

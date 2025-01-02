@@ -358,8 +358,8 @@ class AppDelegate: NSObject,
         syncMenuShortcut(config, action: "toggle_split_zoom", menuItem: self.menuZoomSplit)
         syncMenuShortcut(config, action: "goto_split:previous", menuItem: self.menuPreviousSplit)
         syncMenuShortcut(config, action: "goto_split:next", menuItem: self.menuNextSplit)
-        syncMenuShortcut(config, action: "goto_split:top", menuItem: self.menuSelectSplitAbove)
-        syncMenuShortcut(config, action: "goto_split:bottom", menuItem: self.menuSelectSplitBelow)
+        syncMenuShortcut(config, action: "goto_split:up", menuItem: self.menuSelectSplitAbove)
+        syncMenuShortcut(config, action: "goto_split:down", menuItem: self.menuSelectSplitBelow)
         syncMenuShortcut(config, action: "goto_split:left", menuItem: self.menuSelectSplitLeft)
         syncMenuShortcut(config, action: "goto_split:right", menuItem: self.menuSelectSplitRight)
         syncMenuShortcut(config, action: "resize_split:up,10", menuItem: self.menuMoveSplitDividerUp)
@@ -484,11 +484,19 @@ class AppDelegate: NSObject,
         default: UserDefaults.standard.removeObject(forKey: "NSQuitAlwaysKeepsWindows")
         }
 
-        // Sync our auto-update settings
-        updaterController.updater.automaticallyChecksForUpdates =
-            config.autoUpdate == .check || config.autoUpdate == .download
-        updaterController.updater.automaticallyDownloadsUpdates =
-            config.autoUpdate == .download
+        // Sync our auto-update settings. If SUEnableAutomaticChecks (in our Info.plist) is
+        // explicitly false (NO), auto-updates are disabled. Otherwise, we use the behavior
+        // defined by our "auto-update" configuration (if set) or fall back to Sparkle
+        // user-based defaults.
+        if Bundle.main.infoDictionary?["SUEnableAutomaticChecks"] as? Bool == false {
+            updaterController.updater.automaticallyChecksForUpdates = false
+            updaterController.updater.automaticallyDownloadsUpdates = false
+        } else if let autoUpdate = config.autoUpdate {
+            updaterController.updater.automaticallyChecksForUpdates =
+                autoUpdate == .check || autoUpdate == .download
+            updaterController.updater.automaticallyDownloadsUpdates =
+                autoUpdate == .download
+        }
 
         // Config could change keybindings, so update everything that depends on that
         syncMenuShortcuts(config)
@@ -662,7 +670,7 @@ class AppDelegate: NSObject,
     }
 
     @IBAction func showHelp(_ sender: Any) {
-        guard let url = URL(string: "https://github.com/ghostty-org/ghostty") else { return }
+        guard let url = URL(string: "https://ghostty.org/docs") else { return }
         NSWorkspace.shared.open(url)
     }
 

@@ -6,6 +6,7 @@ const Surface = @This();
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const build_config = @import("../../build_config.zig");
+const build_options = @import("build_options");
 const configpkg = @import("../../config.zig");
 const apprt = @import("../../apprt.zig");
 const font = @import("../../font/main.zig");
@@ -346,6 +347,9 @@ cursor: ?*c.GdkCursor = null,
 /// pass it to GTK.
 title_text: ?[:0]const u8 = null,
 
+/// The timer used to delay title updates in order to prevent flickering.
+update_title_timer: ?c.guint = null,
+
 /// The core surface backing this surface
 core_surface: CoreSurface,
 
@@ -506,7 +510,7 @@ pub fn init(self: *Surface, app: *App, opts: Options) !void {
         var buf: [256]u8 = undefined;
         const name = std.fmt.bufPrint(
             &buf,
-            "surfaces/{X}.service",
+            "surfaces/{X}.scope",
             .{@intFromPtr(self)},
         ) catch unreachable;
 
@@ -647,6 +651,7 @@ pub fn deinit(self: *Surface) void {
     // and therefore the unfocused_overlay has been destroyed as well.
     c.g_object_unref(self.im_context);
     if (self.cursor) |cursor| c.g_object_unref(cursor);
+    if (self.update_title_timer) |timer| _ = c.g_source_remove(timer);
     self.resize_overlay.deinit();
 }
 
@@ -789,10 +794,11 @@ pub fn getContentScale(self: *const Surface) !apprt.ContentScale {
     // can support fractional scaling.
     const gtk_scale: f32 = @floatFromInt(c.gtk_widget_get_scale_factor(@ptrCast(self.gl_area)));
 
-    // If we are on X11, we also have to scale using Xft.dpi
-    const xft_dpi_scale = if (!x11.is_current_display_server()) 1.0 else xft_scale: {
-        // Here we use GTK to retrieve gtk-xft-dpi, which is Xft.dpi multiplied
-        // by 1024. See https://docs.gtk.org/gtk4/property.Settings.gtk-xft-dpi.html
+    // Also scale using font-specific DPI, which is often exposed to the user
+    // via DE accessibility settings (see https://docs.gtk.org/gtk4/class.Settings.html).
+    const xft_dpi_scale = xft_scale: {
+        // gtk-xft-dpi is font DPI multiplied by 1024. See
+        // https://docs.gtk.org/gtk4/property.Settings.gtk-xft-dpi.html
         const settings = c.gtk_settings_get_default();
 
         var value: c.GValue = std.mem.zeroes(c.GValue);
@@ -801,10 +807,9 @@ pub fn getContentScale(self: *const Surface) !apprt.ContentScale {
         c.g_object_get_property(@ptrCast(@alignCast(settings)), "gtk-xft-dpi", &value);
         const gtk_xft_dpi = c.g_value_get_int(&value);
 
-        // As noted above Xft.dpi is multiplied by 1024, so we divide by 1024,
-        // then divide by the default value of Xft.dpi (96) to derive a scale.
-        // Note that gtk-xft-dpi can be fractional, so we use floating point
-        // math here.
+        // As noted above gtk-xft-dpi is multiplied by 1024, so we divide by
+        // 1024, then divide by the default value (96) to derive a scale. Note
+        // gtk-xft-dpi can be fractional, so we use floating point math here.
         const xft_dpi: f32 = @as(f32, @floatFromInt(gtk_xft_dpi)) / 1024;
         break :xft_scale xft_dpi / 96;
     };
@@ -894,7 +899,23 @@ pub fn setTitle(self: *Surface, slice: [:0]const u8) !void {
     if (self.title_text) |old| alloc.free(old);
     self.title_text = copy;
 
+    // delay the title update to prevent flickering
+    if (self.update_title_timer) |timer| {
+        if (c.g_source_remove(timer) == c.FALSE) {
+            log.warn("unable to remove update title timer", .{});
+        }
+        self.update_title_timer = null;
+    }
+    self.update_title_timer = c.g_timeout_add(75, updateTitleTimerExpired, self);
+}
+
+fn updateTitleTimerExpired(ctx: ?*anyopaque) callconv(.C) c.gboolean {
+    const self: *Surface = @ptrCast(@alignCast(ctx));
+
     self.updateTitleLabels();
+    self.update_title_timer = null;
+
+    return c.FALSE;
 }
 
 pub fn getTitle(self: *Surface) ?[:0]const u8 {
@@ -1183,7 +1204,7 @@ fn showContextMenu(self: *Surface, x: f32, y: f32) void {
         @ptrCast(window.window),
         &c.GRAPHENE_POINT_INIT(point.x, point.y),
         @ptrCast(&point),
-    ) == c.False) {
+    ) == 0) {
         log.warn("failed computing point for context menu", .{});
         return;
     }
@@ -1405,14 +1426,22 @@ fn gtkMouseMotion(
         .y = @floatCast(scaled.y),
     };
 
-    // Our pos changed, update
-    self.cursor_pos = pos;
+    // When the GLArea is resized under the mouse, GTK issues a mouse motion
+    // event. This has the unfortunate side effect of causing focus to potentially
+    // change when `focus-follows-mouse` is enabled. To prevent this, we check
+    // if the cursor is still in the same place as the last event and only grab
+    // focus if it has moved.
+    const is_cursor_still = @abs(self.cursor_pos.x - pos.x) < 1 and
+        @abs(self.cursor_pos.y - pos.y) < 1;
 
     // If we don't have focus, and we want it, grab it.
     const gl_widget = @as(*c.GtkWidget, @ptrCast(self.gl_area));
-    if (c.gtk_widget_has_focus(gl_widget) == 0 and self.app.config.@"focus-follows-mouse") {
+    if (!is_cursor_still and c.gtk_widget_has_focus(gl_widget) == 0 and self.app.config.@"focus-follows-mouse") {
         self.grabFocus();
     }
+
+    // Our pos changed, update
+    self.cursor_pos = pos;
 
     // Get our modifiers
     const gtk_mods = c.gdk_event_get_modifier_state(event);
@@ -1899,7 +1928,7 @@ pub fn dimSurface(self: *Surface) void {
     // Don't dim surface if context menu is open.
     // This means we got unfocused due to it opening.
     const context_menu_open = c.gtk_widget_get_visible(window.context_menu);
-    if (context_menu_open == c.True) return;
+    if (context_menu_open == 1) return;
 
     if (self.unfocused_widget != null) return;
     self.unfocused_widget = c.gtk_drawing_area_new();

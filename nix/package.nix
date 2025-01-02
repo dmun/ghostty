@@ -26,6 +26,7 @@
   pandoc,
   revision ? "dirty",
   optimize ? "Debug",
+  x11 ? true,
 }: let
   # The Zig hook has no way to select the release type without actual
   # overriding of the default flags.
@@ -110,7 +111,7 @@
 in
   stdenv.mkDerivation (finalAttrs: {
     pname = "ghostty";
-    version = "1.0.1";
+    version = "1.0.2";
     inherit src;
 
     nativeBuildInputs = [
@@ -136,20 +137,21 @@ in
         oniguruma
         zlib
 
-        libX11
-        libXcursor
-        libXi
-        libXrandr
-
         libadwaita
         gtk4
         glib
         gsettings-desktop-schemas
+      ]
+      ++ lib.optionals x11 [
+        libX11
+        libXcursor
+        libXi
+        libXrandr
       ];
 
     dontConfigure = true;
 
-    zigBuildFlags = "-Dversion-string=${finalAttrs.version}-${revision}-nix";
+    zigBuildFlags = "-Dversion-string=${finalAttrs.version}-${revision}-nix -Dgtk-x11=${lib.boolToString x11}";
 
     preBuild = ''
       rm -rf $ZIG_GLOBAL_CACHE_DIR
@@ -157,7 +159,12 @@ in
       chmod u+rwX -R $ZIG_GLOBAL_CACHE_DIR
     '';
 
-    outputs = ["out" "terminfo" "shell_integration" "vim"];
+    outputs = [
+      "out"
+      "terminfo"
+      "shell_integration"
+      "vim"
+    ];
 
     postInstall = ''
       terminfo_src=${
@@ -183,14 +190,13 @@ in
       echo "$vim" >> "$out/nix-support/propagated-user-env-packages"
     '';
 
-    postFixup = ''
-      patchelf --add-rpath "${lib.makeLibraryPath [libX11]}" "$out/bin/.ghostty-wrapped"
-    '';
-
     meta = {
       homepage = "https://github.com/ghostty-org/ghostty";
       license = lib.licenses.mit;
-      platforms = ["x86_64-linux" "aarch64-linux"];
+      platforms = [
+        "x86_64-linux"
+        "aarch64-linux"
+      ];
       mainProgram = "ghostty";
     };
   })
