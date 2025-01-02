@@ -31,6 +31,91 @@ const MainReturn = switch (build_config.artifact) {
     else => void,
 };
 
+pub fn defaultLog(
+    comptime message_level: std.log.Level,
+    comptime scope: @Type(.EnumLiteral),
+    comptime format: []const u8,
+    args: anytype,
+) void {
+    const reset = "\x1b[0m";
+    const dim = "\x1b[2m";
+    const bold = "\x1b[1m";
+    _ = bold; // autofix
+    const colors = .{
+        .red = "\x1b[31m",
+        .green = "\x1b[32m",
+        .yellow = "\x1b[33m",
+        .blue = "\x1b[34m",
+    };
+
+    const level_color = switch (message_level) {
+        .err => colors.red,
+        .warn => colors.yellow,
+        .info => colors.green,
+        .debug => colors.blue,
+    };
+
+    const level_str = switch (message_level) {
+        .err => "ERROR",
+        .warn => "WARN ",
+        .info => "INFO ",
+        .debug => "DEBUG",
+    };
+
+    const scope_name = if (scope == .default) "" else @tagName(scope);
+
+    const scope_txt = if (scope_name.len > 0)
+        if (scope_name.len < 15)
+            scope_name ++ " " ** (15 - scope_name.len)
+        else
+            scope_name[0..15]
+    else
+        " " ** 15;
+
+    const stderr = std.io.getStdErr().writer();
+    var bw = std.io.bufferedWriter(stderr);
+    const writer = bw.writer();
+
+    const time = std.time.milliTimestamp();
+    const hours: u32 = @intCast(@mod(@divFloor(time, std.time.ms_per_hour), 24));
+    const minutes: u32 = @intCast(@mod(@divFloor(time, std.time.ms_per_min), 60));
+    const seconds: u32 = @intCast(@mod(@divFloor(time, std.time.ms_per_s), 60));
+    const milliseconds: u32 = @intCast(@mod(time, 1000));
+
+    std.debug.lockStdErr();
+    defer std.debug.unlockStdErr();
+
+    nosuspend {
+        // Timestamp
+        writer.print("{s}{d:0>2}:{d:0>2}:{d:0>2}.{d:0>3}{s} ", .{
+            dim,
+            hours,
+            minutes,
+            seconds,
+            milliseconds,
+            reset,
+        }) catch return;
+
+        // Level
+        writer.print("{s}{s}{s} ", .{
+            level_color,
+            level_str,
+            reset,
+        }) catch return;
+
+        // Scope
+        writer.print("{s}{s}{s}  ", .{
+            dim,
+            scope_txt,
+            reset,
+        }) catch return;
+
+        // Message
+        writer.print(format ++ "\n", args) catch return;
+        bw.flush() catch return;
+    }
+}
+
 pub fn main() !MainReturn {
     // We first start by initializing our global state. This will setup
     // process-level state we need to run the terminal. The reason we use
@@ -164,7 +249,7 @@ pub const std_options: std.Options = .{
         else => .info,
     },
 
-    .logFn = logFn,
+    .logFn = defaultLog,
 };
 
 test {

@@ -10,6 +10,7 @@ enum Padding : uint8_t {
 };
 
 struct Uniforms {
+  ushort bottom_row_count;
   float4x4 projection_matrix;
   float2 cell_size;
   ushort2 grid_size;
@@ -141,18 +142,23 @@ fragment float4 cell_bg_fragment(
     } else {
       return float4(0.0);
     }
-  } else if (grid_pos.y > uniforms.grid_size.y - 1) {
-    if (uniforms.padding_extend & EXTEND_DOWN) {
-      grid_pos.y = uniforms.grid_size.y - 1;
-    } else {
-      return float4(0.0);
-    }
+  //} else if (grid_pos.y > uniforms.grid_size.y - 1) {
+    //if (uniforms.padding_extend & EXTEND_DOWN) {
+      //grid_pos.y = grid_pos.y - 1;
+    //} else {
+      //return float4(0.0);
+    //}
   }
 
-  int rows = 2;
-  if (grid_pos.y >= uniforms.grid_size.y - rows) {
-    if (in.position.y < grid_pos.y * uniforms.cell_size.y + uniforms.grid_padding.z) {
-      grid_pos.y = grid_pos.y - 1;
+  int rows = uniforms.bottom_row_count;
+  if (in.position.y >= (uniforms.grid_size.y - rows) * uniforms.cell_size.y - uniforms.grid_padding.x) {
+    grid_pos.y = int(floor((in.position.y - uniforms.grid_padding.x - uniforms.grid_padding.z) / uniforms.cell_size.y));
+    if (in.position.y < (uniforms.grid_size.y - rows) * uniforms.cell_size.y + uniforms.grid_padding.z) {
+      if (uniforms.padding_extend & EXTEND_DOWN) {
+        grid_pos.y = uniforms.grid_size.y - 2;
+      } else {
+        return float4(0.0);
+      }
     }
   }
 
@@ -213,7 +219,7 @@ vertex CellTextVertexOut cell_text_vertex(
   // Convert the grid x, y into world space x, y by accounting for cell size
   float2 cell_pos = uniforms.cell_size * float2(in.grid_pos);
 
-  int rows = 2;
+  int rows = uniforms.bottom_row_count;
   if (in.grid_pos.y >= uniforms.grid_size.y - rows) {
     cell_pos.y += uniforms.grid_padding.z;
   }

@@ -638,6 +638,7 @@ pub fn init(alloc: Allocator, options: renderer.Options) !Metal {
         // Render state
         .cells = .{},
         .uniforms = .{
+            .bottom_row_count = undefined,
             .projection_matrix = undefined,
             .cell_size = undefined,
             .grid_size = undefined,
@@ -1978,6 +1979,8 @@ pub fn setScreenSize(
     self.size = size;
     const grid_size = size.grid();
     const terminal_size = size.terminal();
+    log.info("setScreenSize: {}", .{self.size});
+    log.info("setScreenSize: {}", .{grid_size});
 
     // Blank space around the grid.
     const blank: renderer.Padding = size.screen.blankPadding(
@@ -2018,6 +2021,7 @@ pub fn setScreenSize(
     // Setup our uniforms
     const old = self.uniforms;
     self.uniforms = .{
+        .bottom_row_count = old.bottom_row_count,
         .projection_matrix = math.ortho2d(
             -1 * @as(f32, @floatFromInt(size.padding.left)),
             @floatFromInt(terminal_size.width + size.padding.right),
@@ -2249,6 +2253,12 @@ fn rebuildCells(
                     self.background_color,
                 );
             } else if (y == self.cells.size.rows - 1) {
+                self.uniforms.bottom_row_count = if (row.isOpaque(
+                    color_palette,
+                    self.background_color,
+                )) 1 else 0;
+                log.debug("count: {}", .{self.uniforms.bottom_row_count});
+            } else if (y == self.cells.size.rows - 2) {
                 self.uniforms.padding_extend.down = !row.neverExtendBg(
                     color_palette,
                     self.background_color,

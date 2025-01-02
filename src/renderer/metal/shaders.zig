@@ -106,6 +106,7 @@ pub const Image = extern struct {
 
 /// The uniforms that are passed to the terminal cell shader.
 pub const Uniforms = extern struct {
+    bottom_row_count: u16 align(1),
     // Note: all of the explicit aligmnments are copied from the
     // MSL developer reference just so that we can be sure that we got
     // it all exactly right.
